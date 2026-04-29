@@ -4,3 +4,6 @@ import shutil
  
 app = FastAPI()
 
+Upload_Dir = "uplaods"
+if not os.path.exists(Upload_Dir):
+    os.makedirs(Upload_Dir)
