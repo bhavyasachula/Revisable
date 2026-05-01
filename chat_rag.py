@@ -5,15 +5,18 @@ from langchain_text_splitters import CharacterTextSplitter
 from langchain_community.document_loaders import PyPDFDirectoryLoader,PyPDFLoader
 from langchain_community.embeddings  import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage,AIMessage,SystemMessage
 from dotenv import load_dotenv
-
+from models import Product
 import uvicorn
 import os
 import shutil
 load_dotenv()
 vector_db = None   
-
+chat_history=[]
 app = FastAPI()
+
+
 
 def load_doc(file_path:str):
     file_path = os.path.abspath(file_path)  
@@ -24,7 +27,7 @@ def load_doc(file_path:str):
     return docs
 
 
-vector_db = None   # 🔥 GLOBAL
+vector_db = None   
 
 def pdf_ingest(file_path):
     global vector_db
@@ -82,25 +85,41 @@ def upload_file(file:UploadFile=File(...)):
         }
 @app.post("/chat")
 def chat(question: str):
-    global vector_db
+    global vector_db, chat_history
 
     if vector_db is None:
         return {"answer": "Upload a PDF first"}
 
+  
     docs = vector_db.similarity_search(question, k=4)
 
     context = "\n".join([doc.page_content for doc in docs])
 
     llm = ChatGroq(model="openai/gpt-oss-120b")
 
+    history_text = "\n".join(
+        [f"{msg['role']}: {msg['content']}" for msg in chat_history]
+    )
+
     prompt = f"""
-    Answer only from this context:
+    You are a helpful assistant.
+
+    Conversation history:
+    {history_text}
+
+    Context:
     {context}
 
-    Question: {question}
+    User question:
+    {question}
+
+    Answer based on context and conversation.
     """
 
     response = llm.invoke(prompt)
+
+    chat_history.append({"role": "user", "content": question})
+    chat_history.append({"role": "assistant", "content": response.content})
 
     return {"answer": response.content}
 
