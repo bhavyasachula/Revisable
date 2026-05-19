@@ -7,16 +7,14 @@ from langchain_community.embeddings  import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage,AIMessage,SystemMessage
 from dotenv import load_dotenv
-from models import Product
 import uvicorn
 import os
 import shutil
+
 load_dotenv()
 vector_db = None   
 chat_history=[]
 app = FastAPI()
-
-
 
 def load_doc(file_path:str):
     file_path = os.path.abspath(file_path)  
@@ -83,6 +81,7 @@ def upload_file(file:UploadFile=File(...)):
             "filename":filename,
             "file_url":f"http://127.0.0.1:8000/files/{filename}"
         }
+
 @app.post("/chat")
 def chat(question: str):
     global vector_db, chat_history
