@@ -429,20 +429,23 @@ def bullet_points():
 
     llm = get_llm()
 
-    prompt = f"""You are an expert study assistant. Based on the document below, generate a comprehensive bullet-point summary organized by topic.
+    prompt = f"""You are an expert study assistant. Based on the document below, generate concise study notes organized by important topic.
 
-Return ONLY a valid JSON array (no markdown, no explanation) in this exact format:
-[
-  {{
-    "category": "Category Name",
-    "points": ["point 1", "point 2", "point 3"]
-  }}
-]
+Return ONLY a valid JSON object (no markdown, no explanation) in this exact format:
+{{
+  "topics": [
+    {{
+      "category": "Important Topic",
+      "description": "One short description of why this topic matters.",
+      "points": ["point 1", "point 2", "point 3"]
+    }}
+  ],
+  "overview": "A plain-language overall overview of the document in 3 to 5 sentences."
+}}
 
 Rules:
-- Create 5 to 8 categories
-- Each category should have 3 to 6 concise bullet points
-- Pick a relevant emoji for each category
+- Create 5 to 8 important topics
+- Each topic should have 3 to 6 concise bullet points
 - Keep each point clear and under 20 words
 - Cover all major topics in the document
 
@@ -463,6 +466,20 @@ Document content:
         bullet_data = json.loads(raw)
     except Exception:
         bullet_data = [{"category": "Key Points", "emoji": "📌", "points": [response.content]}]
+
+    if isinstance(bullet_data, list):
+        bullet_data = {
+            "topics": [
+                {
+                    "category": item.get("category", "Key Points"),
+                    "description": item.get("description", ""),
+                    "points": item.get("points", []),
+                }
+                for item in bullet_data
+                if isinstance(item, dict)
+            ],
+            "overview": "",
+        }
 
     set_cached_artifact("bullets", bullet_data)
     return {"bullets": bullet_data}
