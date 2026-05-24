@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 function LoadingState({ text }) {
   return (
@@ -19,8 +19,9 @@ function ErrorState({ text }) {
 }
 
 export default function BulletPoints({ cache, setCache }) {
-  const [openCategories, setOpenCategories] = useState({})
-  const bullets = cache.data
+  const payload = cache.data
+  const topics = Array.isArray(payload) ? payload : payload?.topics ?? []
+  const overview = !Array.isArray(payload) ? payload?.overview : ''
 
   useEffect(() => {
     if (cache.loaded || cache.loading || cache.error) return
@@ -53,63 +54,61 @@ export default function BulletPoints({ cache, setCache }) {
     load()
   }, [cache.error, cache.loaded, cache.loading, setCache])
 
-  useEffect(() => {
-    if (!bullets.length) return
-
-    const open = {}
-    bullets.forEach((_, index) => { open[index] = true })
-    setOpenCategories(open)
-  }, [bullets])
-
-  const toggle = index => {
-    setOpenCategories(prev => ({ ...prev, [index]: !prev[index] }))
-  }
-
   if (cache.loading) return <LoadingState text="Generating bullet points from your PDF..." />
   if (cache.error) return <ErrorState text={cache.error} />
 
-  const totalPoints = bullets.reduce((acc, item) => acc + (item.points?.length ?? 0), 0)
+  const totalPoints = topics.reduce((acc, item) => acc + (item.points?.length ?? 0), 0)
+  const overviewText = overview || topics
+    .map(topic => {
+      const points = topic.points?.slice(0, 2).join(' ')
+      return [topic.description, points].filter(Boolean).join(' ')
+    })
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="bullets-container">
       <div className="section-header">
-        <h2>Key Topics</h2>
-        <p>{totalPoints} points across {bullets.length} categories</p>
+        <h2>Important Topics</h2>
+        <p>{totalPoints} focused notes across {topics.length} topics</p>
       </div>
 
-      <div className="categories">
-        {bullets.map((category, index) => (
+      <div className="topic-list">
+        {topics.map((topic, index) => (
           <div
-            key={`${category.category}-${index}`}
-            className="category-card"
+            key={`${topic.category || topic.topic}-${index}`}
+            className="topic-card"
             style={{ animationDelay: `${index * 0.05}s` }}
           >
-            <button className="category-header" onClick={() => toggle(index)}>
-              <div className="category-title">
-                <span className="category-emoji">{category.emoji || '*'}</span>
-                <h3>{category.category}</h3>
-                <span className="point-count">{category.points?.length ?? 0}</span>
+            <div className="topic-heading">
+              <span className="topic-bullet">•</span>
+              <div>
+                <h3>{topic.category || topic.topic}</h3>
+                {topic.description && <p>{topic.description}</p>}
               </div>
-              <span className={`chevron ${openCategories[index] ? 'open' : ''}`}>{'>'}</span>
-            </button>
+            </div>
 
-            {openCategories[index] && (
-              <ul className="points-list">
-                {(category.points ?? []).map((point, pointIndex) => (
-                  <li
-                    key={`${point}-${pointIndex}`}
-                    className="point-item"
-                    style={{ animationDelay: `${pointIndex * 0.03}s` }}
-                  >
-                    <span className="point-dot" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ul className="points-list">
+              {(topic.points ?? []).map((point, pointIndex) => (
+                <li
+                  key={`${point}-${pointIndex}`}
+                  className="point-item"
+                  style={{ animationDelay: `${pointIndex * 0.03}s` }}
+                >
+                  {point}
+                </li>
+              ))}
+            </ul>
           </div>
         ))}
       </div>
+
+      {overviewText && (
+        <section className="overview-panel" aria-label="Overall overview">
+          <h3>Description:-</h3>
+          <p>{overviewText}</p>
+        </section>
+      )}
     </div>
   )
 }
