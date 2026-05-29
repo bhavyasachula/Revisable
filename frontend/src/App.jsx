@@ -10,6 +10,30 @@ const TABS = [
   { id: 'chat', label: 'AI Chatbot', icon: 'Chat' },
 ]
 
+const FEATURES = [
+  {
+    id: 'bullets',
+    icon: '📝',
+    iconClass: 'empty-card-icon--bullets',
+    title: 'Smart Bullet Points',
+    desc: 'AI extracts key topics, definitions, and concepts into organized study notes.',
+  },
+  {
+    id: 'flashcards',
+    icon: '🃏',
+    iconClass: 'empty-card-icon--flashcards',
+    title: 'Flashcards',
+    desc: 'Interactive flip cards for active recall — the most effective study method.',
+  },
+  {
+    id: 'chat',
+    icon: '💬',
+    iconClass: 'empty-card-icon--chat',
+    title: 'AI Chat Assistant',
+    desc: 'Ask any question about your document and get instant, context-aware answers.',
+  },
+]
+
 const freshStudyData = () => ({
   bullets: { data: [], loading: false, loaded: false, error: '' },
   flashcards: { data: [], loading: false, loaded: false, error: '' },
@@ -89,6 +113,40 @@ export default function App() {
       </header>
 
       <main className="main">
+        {/* Hero Section — only visible before upload */}
+        {!uploaded && (
+          <section className="hero">
+            <div className="hero-orb hero-orb--1" />
+            <div className="hero-orb hero-orb--2" />
+            <div className="hero-orb hero-orb--3" />
+
+            <div className="hero-badge">
+              <span className="hero-badge-dot" />
+              Powered by AI
+            </div>
+
+            <h1>
+              Study Smarter with{' '}
+              <span className="hero-gradient-text">AI-Generated</span>
+              <br />
+              Study Materials
+            </h1>
+
+            <p>
+              Upload any PDF and instantly get bullet-point summaries,
+              interactive flashcards, and a smart chatbot — all tailored to your document.
+            </p>
+
+            <button
+              className="hero-cta"
+              onClick={() => document.getElementById('upload-zone')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              Get Started
+              <span className="hero-cta-arrow">↓</span>
+            </button>
+          </section>
+        )}
+
         <UploadZone onUploadSuccess={handleUploadSuccess} filename={filename} />
 
         {uploaded ? (
@@ -124,15 +182,13 @@ export default function App() {
         ) : (
           <div className="empty-state">
             <div className="empty-cards">
-              {TABS.map(tab => (
-                <div key={tab.id} className="empty-card">
-                  <span>{tab.icon}</span>
-                  <h3>{tab.label}</h3>
-                  <p>
-                    {tab.id === 'bullets' && 'Auto-generated key topics and summaries'}
-                    {tab.id === 'flashcards' && 'Interactive flip study cards'}
-                    {tab.id === 'chat' && 'Ask anything about your document'}
-                  </p>
+              {FEATURES.map(feat => (
+                <div key={feat.id} className="empty-card">
+                  <div className={`empty-card-icon ${feat.iconClass}`}>
+                    {feat.icon}
+                  </div>
+                  <h3>{feat.title}</h3>
+                  <p>{feat.desc}</p>
                 </div>
               ))}
             </div>
