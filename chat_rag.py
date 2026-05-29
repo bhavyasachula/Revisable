@@ -400,6 +400,10 @@ Provide a clear, accurate answer based on the document. If the answer isn't in t
 
 
 # ── Bullet Points ─────────────────────────────────────────────────────────────
+
+MAX_CONTEXT_CHARS = 4000  # ~1000 tokens — keeps Groq requests well within limits
+
+
 @app.post("/bullet-points")
 def bullet_points():
     global vector_db
@@ -411,45 +415,52 @@ def bullet_points():
     if cached is not None:
         return {"bullets": cached, "cached": True}
 
+    # Reduced from 4 queries × k=4 → 2 queries × k=3 to limit context size
     queries = [
         "main topics and key concepts",
-        "important definitions and terminology",
-        "core principles and processes",
-        "examples and applications",
+        "important definitions and processes",
     ]
     seen = set()
     all_docs = []
     for q in queries:
-        for doc in vector_db.similarity_search(q, k=4):
+        for doc in vector_db.similarity_search(q, k=3):
             if doc.page_content not in seen:
                 seen.add(doc.page_content)
                 all_docs.append(doc)
 
-    context = "\n\n".join([doc.page_content for doc in all_docs])
+    # Truncate total context to stay within token limits
+    context_parts = []
+    total_chars = 0
+    for doc in all_docs:
+        if total_chars + len(doc.page_content) > MAX_CONTEXT_CHARS:
+            remaining = MAX_CONTEXT_CHARS - total_chars
+            if remaining > 100:
+                context_parts.append(doc.page_content[:remaining])
+            break
+        context_parts.append(doc.page_content)
+        total_chars += len(doc.page_content)
+
+    context = "\n\n".join(context_parts)
 
     llm = get_llm()
 
-    prompt = f"""You are an expert study assistant. Based on the document below, generate concise study notes organized by important topic.
+    prompt = f"""Based on this document, generate study notes as JSON.
 
-Return ONLY a valid JSON object (no markdown, no explanation) in this exact format:
+Return ONLY valid JSON (no markdown):
 {{
   "topics": [
     {{
-      "category": "Important Topic",
-      "description": "One short description of why this topic matters.",
+      "category": "Topic Name",
+      "description": "Why it matters (1 sentence).",
       "points": ["point 1", "point 2", "point 3"]
     }}
   ],
-  "overview": "A plain-language overall overview of the document in 3 to 5 sentences."
+  "overview": "2-3 sentence overview."
 }}
 
-Rules:
-- Create 5 to 8 important topics
-- Each topic should have 3 to 6 concise bullet points
-- Keep each point clear and under 20 words
-- Cover all major topics in the document
+Rules: 3-5 topics, 3-5 points each, under 20 words per point.
 
-Document content:
+Document:
 {context}"""
 
     response = llm.invoke(prompt)
@@ -497,42 +508,49 @@ def flashcards():
     if cached is not None:
         return {"flashcards": cached, "cached": True}
 
+    # Reduced from 4 queries × k=4 → 2 queries × k=3 to limit context size
     queries = [
-        "definitions and meanings",
-        "how does it work processes",
-        "what is the purpose use case",
-        "key terms and concepts",
+        "definitions and key concepts",
+        "processes and use cases",
     ]
     seen = set()
     all_docs = []
     for q in queries:
-        for doc in vector_db.similarity_search(q, k=4):
+        for doc in vector_db.similarity_search(q, k=3):
             if doc.page_content not in seen:
                 seen.add(doc.page_content)
                 all_docs.append(doc)
 
-    context = "\n\n".join([doc.page_content for doc in all_docs])
+    # Truncate total context to stay within token limits
+    context_parts = []
+    total_chars = 0
+    for doc in all_docs:
+        if total_chars + len(doc.page_content) > MAX_CONTEXT_CHARS:
+            remaining = MAX_CONTEXT_CHARS - total_chars
+            if remaining > 100:
+                context_parts.append(doc.page_content[:remaining])
+            break
+        context_parts.append(doc.page_content)
+        total_chars += len(doc.page_content)
+
+    context = "\n\n".join(context_parts)
 
     llm = get_llm()
 
-    prompt = f"""You are an expert study assistant. Based on the document below, generate 15 to 20 flashcards for active recall studying.
+    prompt = f"""Based on this document, generate flashcards as JSON.
 
-Return ONLY a valid JSON array (no markdown, no explanation) in this exact format:
+Return ONLY a valid JSON array (no markdown):
 [
   {{
-    "question": "Question here?",
-    "answer": "Concise answer here.",
+    "question": "Question?",
+    "answer": "Concise answer.",
     "difficulty": "easy"
   }}
 ]
 
-Rules:
-- difficulty must be one of: "easy", "medium", "hard"
-- Questions should test understanding, not just memorization
-- Answers should be concise (1-3 sentences max)
-- Mix different question styles: what/why/how/define
+Rules: 8-12 cards, difficulty: easy/medium/hard, answers 1-2 sentences max, mix what/why/how.
 
-Document content:
+Document:
 {context}"""
 
     response = llm.invoke(prompt)
