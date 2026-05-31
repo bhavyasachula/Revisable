@@ -468,7 +468,7 @@ def signup(request: AuthRequest, response: Response):
     authenticate_response(response, user_id)
     return {"user": {"id": user_id, "name": name, "email": email}}
 
-
+#login route 
 @app.post("/login")
 def login(request: AuthRequest, response: Response):
     email = normalize_email(request.email)
