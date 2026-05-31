@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Response, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -14,6 +14,7 @@ import shutil
 import json
 import sqlite3
 import hashlib
+import secrets
 from datetime import datetime, timezone
 
 load_dotenv()
@@ -63,6 +64,27 @@ def init_app_db():
     with db_connect() as conn:
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS documents (
                 id TEXT PRIMARY KEY,
                 filename TEXT NOT NULL,
@@ -103,23 +125,28 @@ def init_app_db():
         )
 
 
-def get_active_document_id():
+def app_state_key(user_id: int):
+    return f"active_document_id:{user_id}"
+
+
+def get_active_document_id(user_id: int):
     with db_connect() as conn:
         row = conn.execute(
-            "SELECT value FROM app_state WHERE key = 'active_document_id'"
+            "SELECT value FROM app_state WHERE key = ?",
+            (app_state_key(user_id),),
         ).fetchone()
     return row[0] if row else None
 
 
-def set_active_document_id(document_id: str):
+def set_active_document_id(document_id: str, user_id: int):
     with db_connect() as conn:
         conn.execute(
             """
             INSERT INTO app_state(key, value)
-            VALUES('active_document_id', ?)
+            VALUES(?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
             """,
-            (document_id,),
+            (app_state_key(user_id), document_id),
         )
 
 
@@ -147,8 +174,8 @@ def document_exists(document_id: str):
     return row is not None
 
 
-def get_active_document():
-    document_id = current_document_id or get_active_document_id()
+def get_active_document(user_id: int):
+    document_id = get_active_document_id(user_id)
     if not document_id:
         return None
 
@@ -169,8 +196,8 @@ def get_active_document():
     }
 
 
-def get_cached_artifact(kind: str):
-    document_id = current_document_id or get_active_document_id()
+def get_cached_artifact(kind: str, document_id: str | None = None):
+    document_id = document_id or current_document_id
     if not document_id:
         return None
 
@@ -183,8 +210,8 @@ def get_cached_artifact(kind: str):
     return json.loads(row[0]) if row else None
 
 
-def set_cached_artifact(kind: str, payload):
-    document_id = current_document_id or get_active_document_id()
+def set_cached_artifact(kind: str, payload, document_id: str | None = None):
+    document_id = document_id or current_document_id
     if not document_id:
         return
 
@@ -239,6 +266,85 @@ def hash_file(file_path: str):
     return digest.hexdigest()
 
 
+def normalize_email(email: str):
+    return email.strip().lower()
+
+
+def hash_password(password: str, salt: bytes | None = None):
+    salt = salt or os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120000)
+    return f"{salt.hex()}:{digest.hex()}"
+
+
+def verify_password(password: str, stored_hash: str):
+    try:
+        salt_hex, digest_hex = stored_hash.split(":", 1)
+    except ValueError:
+        return False
+
+    expected = hash_password(password, bytes.fromhex(salt_hex)).split(":", 1)[1]
+    return secrets.compare_digest(expected, digest_hex)
+
+
+def public_user(row):
+    return {"id": row[0], "name": row[1], "email": row[2]}
+
+
+def create_session(user_id: int):
+    token = secrets.token_urlsafe(32)
+    with db_connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO sessions(token, user_id, created_at)
+            VALUES(?, ?, ?)
+            """,
+            (token, user_id, utc_now()),
+        )
+    return token
+
+
+def get_session_user(token: str | None):
+    if not token:
+        return None
+
+    with db_connect() as conn:
+        row = conn.execute(
+            """
+            SELECT users.id, users.name, users.email
+            FROM sessions
+            JOIN users ON users.id = sessions.user_id
+            WHERE sessions.token = ?
+            """,
+            (token,),
+        ).fetchone()
+    return public_user(row) if row else None
+
+
+def get_current_user(request: Request):
+    return get_session_user(request.cookies.get("revisable_session"))
+
+
+def require_user(request: Request):
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Please log in first.")
+    return user
+
+
+def set_session_cookie(response: Response, token: str):
+    response.set_cookie(
+        "revisable_session",
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 14,
+    )
+
+
+def clear_session_cookie(response: Response):
+    response.delete_cookie("revisable_session", httponly=True, samesite="lax")
+
+
 def collection_name(document_id: str):
     return f"doc_{document_id[:32]}"
 
@@ -255,15 +361,12 @@ def pdf_ingest(file_path: str, document_id: str):
 
     embedding = get_embedding()
 
-    if vector_db is None:
-        vector_db = Chroma.from_documents(
-            split_docs,
-            embedding=embedding,
-            persist_directory=chroma_directory,
-            collection_name=collection_name(document_id),
-        )
-    else:
-        vector_db.add_documents(split_docs)
+    vector_db = Chroma.from_documents(
+        split_docs,
+        embedding=embedding,
+        persist_directory=chroma_directory,
+        collection_name=collection_name(document_id),
+    )
 
     vector_db.persist()
 
@@ -285,18 +388,103 @@ def load_persisted_vector_db(document_id: str):
     )
 
 
+def activate_user_document(user_id: int):
+    global vector_db, chat_history, current_document_id
+
+    document_id = get_active_document_id(user_id)
+    if not document_id:
+        return None
+
+    if current_document_id != document_id:
+        current_document_id = document_id
+        chat_history = load_chat_history(document_id)
+        vector_db = load_persisted_vector_db(document_id)
+
+    return document_id
+
+
 def get_llm():
     return ChatGroq(model="llama-3.3-70b-versatile")
 
 
 init_app_db()
-current_document_id = get_active_document_id()
-if current_document_id:
-    chat_history = load_chat_history(current_document_id)
-    vector_db = load_persisted_vector_db(current_document_id)
+current_document_id = None
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
+
+class AuthRequest(BaseModel):
+    name: str | None = None
+    email: str
+    password: str
+
+
+def authenticate_response(response: Response, user_id: int):
+    token = create_session(user_id)
+    set_session_cookie(response, token)
+
+
+@app.get("/me")
+def me(user=Depends(require_user)):
+    return {"user": user}
+
+
+@app.post("/signup")
+def signup(request: AuthRequest, response: Response):
+    name = (request.name or "").strip()
+    email = normalize_email(request.email)
+    password = request.password
+
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="Please enter your name.")
+    if "@" not in email or "." not in email:
+        raise HTTPException(status_code=400, detail="Please enter a valid email.")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+
+    try:
+        with db_connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO users(name, email, password_hash, created_at)
+                VALUES(?, ?, ?, ?)
+                """,
+                (name, email, hash_password(password), utc_now()),
+            )
+            user_id = cursor.lastrowid
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=409, detail="An account with this email already exists.")
+
+    authenticate_response(response, user_id)
+    return {"user": {"id": user_id, "name": name, "email": email}}
+
+
+@app.post("/login")
+def login(request: AuthRequest, response: Response):
+    email = normalize_email(request.email)
+
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT id, name, email, password_hash FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+
+    if not row or not verify_password(request.password, row[3]):
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    authenticate_response(response, row[0])
+    return {"user": {"id": row[0], "name": row[1], "email": row[2]}}
+
+
+@app.post("/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("revisable_session")
+    if token:
+        with db_connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    clear_session_cookie(response)
+    return {"message": "Logged out"}
+
 
 @app.get("/")
 def homepage():
@@ -304,8 +492,8 @@ def homepage():
 
 
 @app.get("/state")
-def app_state():
-    document = get_active_document()
+def app_state(user=Depends(require_user)):
+    document = get_active_document(user["id"])
     if not document:
         return {"uploaded": False, "chat_history": []}
 
@@ -313,13 +501,13 @@ def app_state():
         "uploaded": True,
         "document": document,
         "chat_history": load_chat_history(document["id"]),
-        "has_bullets": get_cached_artifact("bullets") is not None,
-        "has_flashcards": get_cached_artifact("flashcards") is not None,
+        "has_bullets": get_cached_artifact("bullets", document["id"]) is not None,
+        "has_flashcards": get_cached_artifact("flashcards", document["id"]) is not None,
     }
 
 
 @app.post("/upload")
-def upload_file(file: UploadFile = File(...)):
+def upload_file(file: UploadFile = File(...), user=Depends(require_user)):
     global chat_history, current_document_id, vector_db
 
     filename = file.filename
@@ -333,7 +521,7 @@ def upload_file(file: UploadFile = File(...)):
     already_saved = document_exists(document_id)
 
     current_document_id = document_id
-    set_active_document_id(document_id)
+    set_active_document_id(document_id, user["id"])
     save_document(document_id, filename, file_url)
     clear_chat_history(document_id)
     chat_history = []
@@ -358,14 +546,11 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/chat")
-def chat(request: ChatRequest):
+def chat(request: ChatRequest, user=Depends(require_user)):
     global vector_db, chat_history, current_document_id
 
-    if vector_db is None:
-        return {"answer": "Please upload a PDF first."}
-
-    document_id = current_document_id or get_active_document_id()
-    if not document_id:
+    document_id = activate_user_document(user["id"])
+    if not document_id or vector_db is None:
         return {"answer": "Please upload a PDF first."}
 
     docs = vector_db.similarity_search(request.question, k=4)
@@ -405,13 +590,14 @@ MAX_CONTEXT_CHARS = 4000  # ~1000 tokens — keeps Groq requests well within lim
 
 
 @app.post("/bullet-points")
-def bullet_points():
+def bullet_points(user=Depends(require_user)):
     global vector_db
 
-    if vector_db is None:
+    document_id = activate_user_document(user["id"])
+    if not document_id or vector_db is None:
         return {"error": "Please upload a PDF first."}
 
-    cached = get_cached_artifact("bullets")
+    cached = get_cached_artifact("bullets", document_id)
     if cached is not None:
         return {"bullets": cached, "cached": True}
 
@@ -492,19 +678,20 @@ Document:
             "overview": "",
         }
 
-    set_cached_artifact("bullets", bullet_data)
+    set_cached_artifact("bullets", bullet_data, document_id)
     return {"bullets": bullet_data}
 
 
 # ── Flashcards ────────────────────────────────────────────────────────────────
 @app.post("/flashcards")
-def flashcards():
+def flashcards(user=Depends(require_user)):
     global vector_db
 
-    if vector_db is None:
+    document_id = activate_user_document(user["id"])
+    if not document_id or vector_db is None:
         return {"error": "Please upload a PDF first."}
 
-    cached = get_cached_artifact("flashcards")
+    cached = get_cached_artifact("flashcards", document_id)
     if cached is not None:
         return {"flashcards": cached, "cached": True}
 
@@ -567,7 +754,7 @@ Document:
     except Exception:
         cards = [{"question": "Could not generate flashcards", "answer": response.content, "difficulty": "medium"}]
 
-    set_cached_artifact("flashcards", cards)
+    set_cached_artifact("flashcards", cards, document_id)
     return {"flashcards": cards}
 
 
