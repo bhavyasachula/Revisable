@@ -485,7 +485,7 @@ def login(request: AuthRequest, response: Response):
     authenticate_response(response, row[0])
     return {"user": {"id": row[0], "name": row[1], "email": row[2]}}
 
-
+#logout route
 @app.post("/logout")
 def logout(request: Request, response: Response):
     token = request.cookies.get("revisable_session")
