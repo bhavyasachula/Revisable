@@ -11,7 +11,7 @@ export default function AuthPanel({ onAuth }) {
   const updateField = event => {
     setForm(prev => ({ ...prev, [event.target.name]: event.target.value }))
   }
-
+// submit 
   const submit = async event => {
     event.preventDefault()
     setError('')
