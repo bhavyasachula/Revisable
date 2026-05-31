@@ -438,7 +438,7 @@ def authenticate_response(response: Response, user_id: int):
 def me(user=Depends(require_user)):
     return {"user": user}
 
-
+# signup route
 @app.post("/signup")
 def signup(request: AuthRequest, response: Response):
     name = (request.name or "").strip()
