@@ -1460,6 +1460,226 @@ button {
    Responsive
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Polished light theme overrides */
+.hero-orb {
+  display: none;
+}
+
+.account-name,
+.hero h1,
+.upload-prompt h2,
+.empty-card h3,
+.section-header h2,
+.topic-heading h3,
+.flashcards-header h2,
+.chat-header-info h3,
+.chat-welcome h3 {
+  color: var(--ink);
+}
+
+.logout-btn,
+.auth-form,
+.auth-tabs,
+.upload-zone.uploaded,
+.tab-bar,
+.chat-input-area {
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.auth-panel,
+.upload-zone,
+.empty-card,
+.topic-card,
+.overview-panel,
+.flip-card-front,
+.chatbot-container,
+.state-box {
+  border-color: var(--line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.68)),
+    var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.auth-panel {
+  background:
+    linear-gradient(135deg, rgba(20, 184, 166, 0.14), rgba(37, 99, 235, 0.08) 48%, rgba(225, 29, 72, 0.06)),
+    rgba(255, 255, 255, 0.88);
+}
+
+.auth-kicker,
+.hero-badge {
+  border-color: rgba(20, 184, 166, 0.28);
+  background: rgba(20, 184, 166, 0.1);
+  color: var(--accent-1);
+}
+
+.auth-field input,
+.chat-input {
+  background: #fff;
+  color: var(--ink);
+}
+
+.auth-tabs button,
+.tab-btn {
+  color: var(--muted);
+}
+
+.auth-tabs button.active,
+.auth-submit,
+.hero-cta,
+.tab-btn.active,
+.send-btn,
+.message.user .msg-bubble {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(15, 118, 110, 0.18);
+}
+
+.auth-field input:focus,
+.chat-input:focus {
+  border-color: rgba(20, 184, 166, 0.55);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+}
+
+.hero-gradient-text {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2) 58%, var(--accent-3));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p,
+.auth-copy p,
+.upload-prompt p,
+.upload-loading p,
+.empty-card p,
+.section-header p,
+.topic-heading p,
+.card-hint,
+.fc-tip,
+.chat-welcome p {
+  color: var(--muted);
+}
+
+.upload-zone::before {
+  border-color: rgba(20, 184, 166, 0.24);
+}
+
+.upload-zone:not(.uploaded):hover,
+.upload-zone.dragging {
+  border-color: rgba(20, 184, 166, 0.48);
+  box-shadow: var(--shadow), 0 18px 54px rgba(20, 184, 166, 0.14);
+}
+
+.upload-zone:not(.uploaded):hover::before,
+.upload-zone.dragging::before {
+  border-color: rgba(20, 184, 166, 0.42);
+}
+
+.upload-icon,
+.chat-avatar {
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  box-shadow: 0 12px 28px rgba(15, 118, 110, 0.18);
+}
+
+.upload-icon.success,
+.chat-welcome-icon,
+.message.assistant .msg-avatar {
+  background: rgba(20, 184, 166, 0.12);
+  color: var(--accent-1);
+}
+
+.empty-card::before {
+  background: linear-gradient(90deg, var(--accent-1), var(--accent-2), var(--accent-3));
+}
+
+.empty-card:hover,
+.topic-card:hover {
+  border-color: rgba(20, 184, 166, 0.28);
+  box-shadow: var(--shadow), var(--shadow-glow);
+}
+
+.empty-card-icon--bullets {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--accent-2);
+}
+
+.empty-card-icon--flashcards {
+  background: rgba(217, 119, 6, 0.1);
+  color: var(--amber);
+}
+
+.empty-card-icon--chat {
+  background: rgba(20, 184, 166, 0.12);
+  color: var(--accent-1);
+}
+
+.topic-bullet,
+.overview-panel h3,
+.card-label {
+  color: var(--accent-1);
+}
+
+.point-item,
+.overview-panel p,
+.msg-bubble {
+  color: #344054;
+}
+
+.flip-card-back {
+  border-color: rgba(15, 118, 110, 0.2);
+  background: linear-gradient(135deg, #0f766e 0%, #2563eb 64%, #e11d48 100%);
+}
+
+.nav-btn {
+  background: #fff;
+  color: var(--ink);
+}
+
+.nav-btn:hover:not(:disabled) {
+  background: rgba(20, 184, 166, 0.1);
+  border-color: rgba(20, 184, 166, 0.28);
+}
+
+.chatbot-container {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.chat-header {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(37, 99, 235, 0.08));
+}
+
+.chat-messages {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.74), rgba(255, 255, 255, 0.9)),
+    var(--surface);
+}
+
+.suggestion-chip,
+.msg-bubble {
+  background: #fff;
+  border-color: var(--line);
+}
+
+.suggestion-chip {
+  color: var(--ink);
+}
+
+.suggestion-chip:hover {
+  border-color: rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.08);
+}
+
+.chat-input-area {
+  border-top-color: var(--line);
+}
+
+.spinner {
+  border-color: rgba(15, 23, 42, 0.1);
+  border-top-color: var(--accent-1);
+}
+
 @media (max-width: 720px) {
   .header-content,
   .main {
