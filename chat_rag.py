@@ -109,12 +109,19 @@ def init_app_db():
             CREATE TABLE IF NOT EXISTS chat_messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 document_id TEXT NOT NULL,
+                user_id INTEGER,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
             """
         )
+        columns = [
+            row[1]
+            for row in conn.execute("PRAGMA table_info(chat_messages)").fetchall()
+        ]
+        if "user_id" not in columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN user_id INTEGER")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS app_state (
@@ -228,34 +235,37 @@ def set_cached_artifact(kind: str, payload, document_id: str | None = None):
         )
 
 
-def load_chat_history(document_id: str):
+def load_chat_history(document_id: str, user_id: int):
     with db_connect() as conn:
         rows = conn.execute(
             """
             SELECT role, content
             FROM chat_messages
-            WHERE document_id = ?
+            WHERE document_id = ? AND user_id = ?
             ORDER BY id ASC
             """,
-            (document_id,),
+            (document_id, user_id),
         ).fetchall()
     return [{"role": role, "content": content} for role, content in rows]
 
 
-def append_chat_message(document_id: str, role: str, content: str):
+def append_chat_message(document_id: str, user_id: int, role: str, content: str):
     with db_connect() as conn:
         conn.execute(
             """
-            INSERT INTO chat_messages(document_id, role, content, created_at)
-            VALUES(?, ?, ?, ?)
+            INSERT INTO chat_messages(document_id, user_id, role, content, created_at)
+            VALUES(?, ?, ?, ?, ?)
             """,
-            (document_id, role, content, utc_now()),
+            (document_id, user_id, role, content, utc_now()),
         )
 
 
-def clear_chat_history(document_id: str):
+def clear_chat_history(document_id: str, user_id: int):
     with db_connect() as conn:
-        conn.execute("DELETE FROM chat_messages WHERE document_id = ?", (document_id,))
+        conn.execute(
+            "DELETE FROM chat_messages WHERE document_id = ? AND user_id = ?",
+            (document_id, user_id),
+        )
 
 
 def hash_file(file_path: str):
@@ -397,7 +407,7 @@ def activate_user_document(user_id: int):
 
     if current_document_id != document_id:
         current_document_id = document_id
-        chat_history = load_chat_history(document_id)
+        chat_history = load_chat_history(document_id, user_id)
         vector_db = load_persisted_vector_db(document_id)
 
     return document_id
@@ -500,7 +510,7 @@ def app_state(user=Depends(require_user)):
     return {
         "uploaded": True,
         "document": document,
-        "chat_history": load_chat_history(document["id"]),
+        "chat_history": load_chat_history(document["id"], user["id"]),
         "has_bullets": get_cached_artifact("bullets", document["id"]) is not None,
         "has_flashcards": get_cached_artifact("flashcards", document["id"]) is not None,
     }
@@ -523,7 +533,7 @@ def upload_file(file: UploadFile = File(...), user=Depends(require_user)):
     current_document_id = document_id
     set_active_document_id(document_id, user["id"])
     save_document(document_id, filename, file_url)
-    clear_chat_history(document_id)
+    clear_chat_history(document_id, user["id"])
     chat_history = []
 
     vector_db = load_persisted_vector_db(document_id) if already_saved else None
@@ -578,8 +588,8 @@ Provide a clear, accurate answer based on the document. If the answer isn't in t
 
     chat_history.append({"role": "user", "content": request.question})
     chat_history.append({"role": "assistant", "content": response.content})
-    append_chat_message(document_id, "user", request.question)
-    append_chat_message(document_id, "assistant", response.content)
+    append_chat_message(document_id, user["id"], "user", request.question)
+    append_chat_message(document_id, user["id"], "assistant", response.content)
 
     return {"answer": response.content}
 
