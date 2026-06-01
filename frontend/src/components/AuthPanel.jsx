@@ -7,7 +7,7 @@ export default function AuthPanel({ onAuth }) {
   const [error, setError] = useState('')
 
   const isSignup = mode === 'signup'
-
+  const golu = "goluDemo"
   const updateField = event => {
     setForm(prev => ({ ...prev, [event.target.name]: event.target.value }))
   }
