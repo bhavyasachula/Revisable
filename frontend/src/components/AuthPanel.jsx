@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 export default function AuthPanel({ onAuth }) {
   const [mode, setMode] = useState('login')
-  const [form, setForm] = useState({ name: '', email: '', password: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '' }) // whole form thing is operating by this usestate in Usestate we have 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
